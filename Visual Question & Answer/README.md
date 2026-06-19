@@ -31,15 +31,15 @@ glance whether it came from the local model or the cloud.
 
 ```
 visual_qa/
-  app.yaml          # declares the WebUI-HTML brick
-  sketch/
-    sketch.ino      # STM32 sketch: RGB status LED via Bridge
-  python/
-    main.py         # the app: camera, dashboard API, backend routing
-  assets/
-    index.html      # the dashboard UI
-    bitgreen-logo.png
-  README.md
+|-- app.yaml            # declares the WebUI-HTML brick
+|  |-- sketch/
+|  |-- sketch.ino       # STM32 sketch: RGB status LED via Bridge
+|-- python/
+|  |--  main.py         # the app: camera, dashboard API, backend routing
+|-- assets/
+|  |-- index.html       # the dashboard UI
+|  |-- bitgreen-logo.png
+|-- README.md
 ```
 
 ## Setup
