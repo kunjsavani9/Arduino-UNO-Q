@@ -1,0 +1,6 @@
+name: Dual Channel Thermal PID Controller
+description: ""
+ports: []
+bricks:
+- arduino:web_ui: {}
+icon: 🌡️
