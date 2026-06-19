@@ -12,14 +12,14 @@ temperatures.
 ## App Lab project layout
 
     Dual-Channel Thermal PID Controller
-      assets/
-        index.html          web dashboard (served by the WebUI-HTML brick)
-        bitgreen-logo.png    logo shown in the dashboard header
-      python/
-        main.py              WebUI brick + Bridge orchestration (Linux MPU)
-      sketch/
-        sketch.ino           dual PID + monitor/safety threads (STM32 MCU)
-      app.yaml               lists the WebUI - HTML brick
+     |-> assets/
+     |  |-> index.html            #web dashboard (served by the WebUI-HTML brick)
+     |  |-> bitgreen-logo.png     #logo shown in the dashboard header
+     |-> python/
+     |  |-> main.py               #WebUI brick + Bridge orchestration (Linux MPU)
+     |-> sketch/
+     |  |-> sketch.ino            #dual PID + monitor/safety threads (STM32 MCU)
+     |-> app.yaml                 #lists the WebUI - HTML brick
 
 ## Hardware / pin map
 
