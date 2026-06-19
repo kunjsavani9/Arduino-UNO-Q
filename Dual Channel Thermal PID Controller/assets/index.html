@@ -1,1 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bitgreen - Dual Thermal PID</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+ :root{ --brand:#2a47b5; --brand-dark:#1f3590; --bg:#eef1f6; --card:#ffffff;
+        --line:#e6eaf2; --text:#1e293b; --muted:#64748b; --c1:#e0564f; --c2:#1f9d6b; }
+ *{box-sizing:border-box}
+ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--text)}
+ .wrap{max-width:1280px;margin:0 auto;padding:24px}
+ .topbar{display:flex;align-items:center;justify-content:space-between;background:var(--card);
+   border:1px solid var(--line);border-radius:14px;padding:16px 22px;
+   box-shadow:0 1px 3px rgba(16,24,40,.06);margin-bottom:20px}
+ .brand{display:flex;align-items:center;gap:16px}
+ .brand img{height:42px}
+ .brand .titles h1{font-size:18px;margin:0;font-weight:700}
+ .brand .titles p{font-size:13px;margin:2px 0 0;color:var(--muted)}
+ .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
+   padding:7px 14px;border-radius:999px;background:#eef6ef;color:#1f9d6b}
+ .badge.off{background:#fdeceb;color:#e0564f}
+ .badge .dot{width:9px;height:9px;border-radius:50%;background:currentColor}
 
+ .main{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+ .left{display:flex;flex-direction:column;gap:20px}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+   padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+ .chartcard{min-width:0;overflow:hidden}
+ .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 16px}
+ .controls{display:flex;flex-direction:column;gap:14px}
+ .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+ .field input{width:100%;padding:10px 12px;font-size:16px;border-radius:9px;border:1px solid #cdd5e4;background:#fff;color:var(--text)}
+ .field input:focus{outline:none;border-color:var(--brand)}
+ button{width:100%;padding:11px 24px;font-size:15px;font-weight:600;border:0;border-radius:9px;background:var(--brand);color:#fff;cursor:pointer;transition:background .15s}
+ button:hover{background:var(--brand-dark)}
+ .chan{display:flex;align-items:center;gap:12px;padding:12px 0}
+ .chan + .chan{border-top:1px solid var(--line)}
+ .swatch{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+ .chan .col{display:flex;flex-direction:column}
+ .chan .temp{font-size:24px;font-weight:700;line-height:1.1}
+ .chan .meta{font-size:12px;color:var(--muted);margin-top:3px}
+ .pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef1f6;color:var(--muted);margin-left:5px}
+ .pill.on{background:#fff4e5;color:#c77700}
+ .alarm{margin-top:12px;color:#e0564f;font-weight:700;display:none}
+
+ .panel{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+ .panel + .panel{margin-top:14px}
+ .ptitle{display:flex;align-items:center;gap:18px;margin:0 2px 8px;flex-wrap:wrap}
+ .ptitle h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0}
+ .legend{display:flex;gap:14px;flex-wrap:wrap}
+ .lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#334155}
+ .lg .ln{width:16px;height:0;border-top-width:2px;border-top-style:solid}
+ .lg .ln.dash{border-top-style:dashed}
+ /* fixed y-axis canvas + horizontally-scrolling plot canvas */
+ .prow{display:flex;align-items:flex-start}
+ .yax{flex:0 0 58px;width:58px;display:block}
+ .scroll{flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden}
+ .scroll::-webkit-scrollbar{height:10px}
+ .scroll::-webkit-scrollbar-thumb{background:#c7d0e2;border-radius:6px}
+ .plotc{display:block}
+ .hint{font-size:11px;color:var(--muted);margin:10px 2px 0}
+ .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+ @media(max-width:900px){.main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="topbar">
+   <div class="brand">
+     <img src="bitgreen-logo.png" alt="Bitgreen Technolabz">
+     <div class="titles">
+       <h1>Dual-Channel Thermal PID Controller</h1>
+       <p>Arduino UNO Q &middot; Real-Time RTOS Control</p>
+     </div>
+   </div>
+   <span id="badge" class="badge off"><span class="dot"></span><span id="badgetxt">connecting...</span></span>
+ </div>
+
+ <div class="main">
+   <div class="left">
+     <div class="card">
+       <h2>Reference Temperatures</h2>
+       <div class="controls">
+         <div class="field"><label>Ref. Temp 1 (&deg;C)</label><input id="ref1" type="number" value="45" step="0.5"></div>
+         <div class="field"><label>Ref. Temp 2 (&deg;C)</label><input id="ref2" type="number" value="55" step="0.5"></div>
+         <button onclick="setRefs()">Set</button>
+       </div>
+     </div>
+     <div class="card">
+       <h2>Live Status</h2>
+       <div class="chan">
+         <span class="swatch" style="background:var(--c1)"></span>
+         <div class="col"><span class="temp" id="t1">-</span>
+           <span class="meta">Ch 1 &rarr; <span id="r1">45</span>&deg;C<span class="pill" id="p1">PWM 0</span><span class="pill" id="l1">LED off</span></span></div>
+       </div>
+       <div class="chan">
+         <span class="swatch" style="background:var(--c2)"></span>
+         <div class="col"><span class="temp" id="t2">-</span>
+           <span class="meta">Ch 2 &rarr; <span id="r2">55</span>&deg;C<span class="pill" id="p2">PWM 0</span><span class="pill" id="l2">LED off</span></span></div>
+       </div>
+       <div class="alarm" id="alarm">&#9888; SAFETY TRIP - heaters disabled</div>
+     </div>
+   </div>
+
+   <div class="card chartcard">
+     <div class="panel">
+       <div class="ptitle">
+         <h3>Temperature (&deg;C)</h3>
+         <div class="legend">
+           <span class="lg"><span class="ln" style="border-color:var(--c1)"></span>T1 actual</span>
+           <span class="lg"><span class="ln dash" style="border-color:var(--c1)"></span>Ref 1</span>
+           <span class="lg"><span class="ln" style="border-color:var(--c2)"></span>T2 actual</span>
+           <span class="lg"><span class="ln dash" style="border-color:var(--c2)"></span>Ref 2</span>
+         </div>
+       </div>
+       <div class="prow">
+         <canvas class="yax" id="tempY"></canvas>
+         <div class="scroll" id="tScroll"><canvas class="plotc" id="tempChart"></canvas></div>
+       </div>
+     </div>
+     <div class="panel">
+       <div class="ptitle">
+         <h3>PWM Signal (0-255)</h3>
+         <div class="legend">
+           <span class="lg"><span class="ln" style="border-color:var(--c1)"></span>PWM 1</span>
+           <span class="lg"><span class="ln" style="border-color:var(--c2)"></span>PWM 2</span>
+         </div>
+       </div>
+       <div class="prow">
+         <canvas class="yax" id="pwmY"></canvas>
+         <div class="scroll" id="pScroll"><canvas class="plotc" id="pwmChart"></canvas></div>
+       </div>
+     </div>
+     <div class="hint">Scroll horizontally to review earlier data &middot; the view follows live data while pinned to the right edge. Legends and the Y-axis stay fixed.</div>
+   </div>
+ </div>
+
+ <div class="foot">&copy; Bitgreen Technolabz &middot; Dual-Channel Thermal PID Controller</div>
+</div>
+
+<script>
+const socket = io();
+const badge=document.getElementById('badge'), badgetxt=document.getElementById('badgetxt');
+socket.on("connect",()=>{badge.className="badge";badgetxt.textContent="connected";});
+socket.on("disconnect",()=>{badge.className="badge off";badgetxt.textContent="disconnected";});
+
+const css=getComputedStyle(document.documentElement);
+const C1=css.getPropertyValue('--c1').trim(), C2=css.getPropertyValue('--c2').trim();
+const GRID='#eaeef5', AXIS='#64748b', XH=26, clear='rgba(0,0,0,0)';
+const HT=290, HP=165, YW=58;
+
+// responsive:false => Chart.js draws to the exact size we pass via chart.resize(w,h);
+// it never measures the DOM, so the nested flex/scroll layout can't collapse it.
+function baseOpts(){ return {
+  responsive:false, maintainAspectRatio:false, animation:false,
+  layout:{padding:{top:6,right:8,bottom:0,left:0}},
+  plugins:{legend:{display:false}, tooltip:{enabled:false}} }; }
+
+function plotChart(id, datasets, yMin, yMax){
+  const o=baseOpts();
+  o.scales={
+    y:{ min:yMin, max:yMax, ticks:{display:false}, grid:{color:GRID,drawTicks:false}, border:{display:false} },
+    x:{ grid:{color:GRID}, ticks:{color:AXIS,maxRotation:0,autoSkip:true,maxTicksLimit:30},
+        afterFit:s=>{ s.height=XH; } } };
+  return new Chart(document.getElementById(id),{type:'line', data:{labels:[],datasets}, options:o});
+}
+function axisChart(id, yMin, yMax, step){
+  const o=baseOpts(); o.layout.padding.right=0; o.layout.padding.left=0;
+  o.scales={
+    y:{ min:yMin, max:yMax, position:'left', grid:{display:false}, border:{display:false},
+        ticks:{color:AXIS, stepSize:step, font:{size:11}, padding:6},
+        afterFit:s=>{ s.width=YW; } },         // fill the fixed canvas so labels right-align at its edge
+    x:{ grid:{display:false}, ticks:{display:false}, border:{display:false},
+        afterFit:s=>{ s.height=XH; } } };
+  return new Chart(document.getElementById(id),{type:'line',
+    data:{labels:['',''],datasets:[{data:[yMin,yMax],borderColor:clear,pointRadius:0}]}, options:o});
+}
+
+const tempChart = plotChart('tempChart', [
+  {label:'T1 actual',data:[],borderColor:C1,backgroundColor:C1,tension:.25,pointRadius:0,borderWidth:2},
+  {label:'Ref 1',data:[],borderColor:C1,borderDash:[6,5],pointRadius:0,borderWidth:1},
+  {label:'T2 actual',data:[],borderColor:C2,backgroundColor:C2,tension:.25,pointRadius:0,borderWidth:2},
+  {label:'Ref 2',data:[],borderColor:C2,borderDash:[6,5],pointRadius:0,borderWidth:1}], 25, 70);
+const pwmChart = plotChart('pwmChart', [
+  {label:'PWM 1',data:[],borderColor:C1,backgroundColor:C1,tension:.2,pointRadius:0,borderWidth:2,stepped:true},
+  {label:'PWM 2',data:[],borderColor:C2,backgroundColor:C2,tension:.2,pointRadius:0,borderWidth:2,stepped:true}], 0, 255);
+const tempY = axisChart('tempY', 25, 70, 5);
+const pwmY  = axisChart('pwmY', 0, 255, 51);
+
+const MAXPTS=2000, PX_PER_PT=10;
+const tScroll=document.getElementById('tScroll'), pScroll=document.getElementById('pScroll');
+let follow=true, syncing=false;
+
+function plotWidth(){
+  const n=Math.max(2, tempChart.data.labels.length);
+  return Math.max(tScroll.clientWidth, n*PX_PER_PT);
+}
+function fit(){
+  const w=plotWidth();
+  tempChart.resize(w,HT);  pwmChart.resize(w,HP);
+  tempY.resize(YW,HT);     pwmY.resize(YW,HP);
+}
+// initial sizing (after layout settles)
+window.addEventListener('load', fit);
+window.addEventListener('resize', ()=>{ fit(); tempChart.update('none'); pwmChart.update('none'); });
+fit();
+
+function syncFrom(a,b){ a.addEventListener('scroll',()=>{
+  if(syncing){return;} syncing=true; b.scrollLeft=a.scrollLeft; syncing=false;
+  follow = a.scrollLeft + a.clientWidth >= a.scrollWidth - 40;
+});}
+syncFrom(tScroll,pScroll); syncFrom(pScroll,tScroll);
+
+function setRefs(){
+ const r1=parseFloat(document.getElementById('ref1').value);
+ const r2=parseFloat(document.getElementById('ref2').value);
+ socket.emit("set_refs",{ref1:r1,ref2:r2});
+}
+function push(arr,v){ arr.push(v); if(arr.length>MAXPTS) arr.shift(); }
+
+socket.on("telemetry", d=>{
+ const tl=tempChart.data, pl=pwmChart.data;
+ [tl,pl].forEach(c=>{ c.labels.push(d.t); if(c.labels.length>MAXPTS) c.labels.shift(); });
+ push(tl.datasets[0].data,d.T1); push(tl.datasets[1].data,d.ref1);
+ push(tl.datasets[2].data,d.T2); push(tl.datasets[3].data,d.ref2);
+ push(pl.datasets[0].data,d.pwm1); push(pl.datasets[1].data,d.pwm2);
+
+ const w=plotWidth();
+ tempChart.resize(w,HT); pwmChart.resize(w,HP);
+ tempChart.update('none'); pwmChart.update('none');
+ if(follow){ tScroll.scrollLeft=tScroll.scrollWidth; pScroll.scrollLeft=pScroll.scrollWidth; }
+
+ document.getElementById('t1').textContent=d.T1.toFixed(1)+'\u00b0C';
+ document.getElementById('t2').textContent=d.T2.toFixed(1)+'\u00b0C';
+ document.getElementById('r1').textContent=d.ref1.toFixed(1);
+ document.getElementById('r2').textContent=d.ref2.toFixed(1);
+ document.getElementById('p1').textContent='PWM '+d.pwm1;
+ document.getElementById('p2').textContent='PWM '+d.pwm2;
+ const l1=document.getElementById('l1'),l2=document.getElementById('l2');
+ l1.textContent='LED '+(d.led1?'ON':'off'); l1.className='pill'+(d.led1?' on':'');
+ l2.textContent='LED '+(d.led2?'ON':'off'); l2.className='pill'+(d.led2?' on':'');
+ document.getElementById('alarm').style.display=(d.trip1||d.trip2)?'block':'none';
+});
+</script>
+</body>
+</html>
