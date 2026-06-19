@@ -1,1 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual QA - Edge Vision Assistant</title>
+<style>
+  :root{
+    --bg:#eef1f5; --panel:#ffffff; --ink:#1A1A2E; --muted:#64748b;
+    --teal:#10a9a4; --teal-dk:#0c8c88; --line:#e4e9f0;
+    --ok:#1faa59; --off:#d9534f;
+    --shadow:0 1px 2px rgba(16,30,54,.06),0 8px 24px rgba(16,30,54,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  header{background:var(--panel);border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:16px;padding:12px 24px;
+         box-shadow:var(--shadow);position:sticky;top:0;z-index:10}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand img,.brand svg{height:34px;width:auto;display:block}
+  .titles h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+  .titles span{font-size:12px;color:var(--muted)}
+  .spacer{flex:1}
+  .pill{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
+        background:#f4f7fa;border:1px solid var(--line);border-radius:999px;
+        padding:6px 14px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+  .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(31,170,89,.15)}
+  .dot.bad{background:var(--off);box-shadow:0 0 0 3px rgba(217,83,79,.15)}
+  main{max-width:1180px;margin:22px auto;padding:0 24px;
+       display:grid;grid-template-columns:1.05fr .95fr;gap:22px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        box-shadow:var(--shadow);overflow:hidden}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;
+           color:var(--muted);margin:0;padding:14px 18px;border-bottom:1px solid var(--line);
+           display:flex;align-items:center;gap:8px}
+  .card h2 .bar{width:4px;height:14px;border-radius:2px;background:var(--teal)}
+  .body{padding:18px}
+  .viewport{position:relative;border-radius:10px;overflow:hidden;background:#0c1118;
+            aspect-ratio:4/3;display:flex;align-items:center;justify-content:center}
+  .viewport img{width:100%;height:100%;object-fit:cover;display:block}
+  .viewport .live{position:absolute;top:10px;left:10px;background:rgba(12,17,24,.7);
+                  color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;
+                  padding:4px 9px;border-radius:6px;display:flex;align-items:center;gap:6px}
+  .viewport .live .rec{width:8px;height:8px;border-radius:50%;background:#ff4d4f;
+                       animation:blink 1.4s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .overlay{position:absolute;inset:0;background:rgba(12,17,24,.55);color:#fff;
+           display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;
+           font-size:14px;font-weight:600}
+  .overlay.show{display:flex}
+  .spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.3);
+        border-top-color:#fff;border-radius:50%;animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  .controls{margin-top:16px;display:flex;gap:12px;align-items:center}
+  textarea{flex:1;resize:none;height:46px;padding:12px 14px;border:1px solid var(--line);
+           border-radius:10px;font:inherit;font-size:14px;color:var(--ink);background:#fbfcfe}
+  textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(16,169,164,.15)}
+  .capture{flex:0 0 auto;width:54px;height:54px;border-radius:50%;border:none;cursor:pointer;
+           background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;
+           box-shadow:0 6px 16px rgba(16,169,164,.4);transition:.15s}
+  .capture:hover{background:var(--teal-dk);transform:translateY(-1px)}
+  .capture:disabled{background:#9fb2bd;box-shadow:none;cursor:not-allowed;transform:none}
+  .capture svg{width:24px;height:24px}
+  .chips{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:12.5px;color:var(--teal-dk);background:#e9f7f6;border:1px solid #cdeceb;
+        padding:6px 11px;border-radius:999px;cursor:pointer;transition:.12s}
+  .chip:hover{background:#d8f0ef}
+  .hint{margin-top:14px;font-size:12px;color:var(--muted);line-height:1.5}
+  .qa{padding:0}
+  .empty{padding:46px 22px;text-align:center;color:var(--muted);font-size:14px}
+  .item{display:flex;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:none}
+  .thumb{flex:0 0 96px;width:96px;height:72px;border-radius:8px;object-fit:cover;
+         border:1px solid var(--line);background:#0c1118}
+  .qa-text{flex:1;min-width:0}
+  .q{font-weight:600;font-size:13.5px;margin:0 0 5px}
+  .q::before{content:"Q";display:inline-block;width:18px;height:18px;line-height:18px;
+             text-align:center;background:var(--ink);color:#fff;border-radius:5px;
+             font-size:11px;margin-right:7px}
+  .a{font-size:13.5px;color:#33415a;line-height:1.55;margin:0}
+  .a::before{content:"A";display:inline-block;width:18px;height:18px;line-height:18px;
+             text-align:center;background:var(--teal);color:#fff;border-radius:5px;
+             font-size:11px;margin-right:7px}
+  .meta{margin-top:8px;font-size:11.5px;color:var(--muted);display:flex;gap:12px}
+  .err{padding:14px 18px;background:#fdecea;color:#a4221b;font-size:13px;border-bottom:1px solid #f5cdc8}
+  footer{max-width:1180px;margin:8px auto 28px;padding:0 24px;
+         color:var(--muted);font-size:11.5px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="bitgreen-logo.png" alt="Bitgreen" onerror="this.outerHTML=BG_SVG">
+    <div class="titles">
+      <h1>Visual QA &middot; Edge Vision Assistant</h1>
+      <span>Arduino UNO&nbsp;Q &middot; local + cloud vision-language model</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill"><span id="dot" class="dot"></span><span id="statusText">Checking model&hellip;</span></div>
+</header>
 
+<main>
+  <section class="card">
+    <h2><span class="bar"></span>Live Camera</h2>
+    <div class="body">
+      <div class="viewport">
+        <img src="/video_feed" alt="camera preview">
+        <div class="live"><span class="rec"></span>LIVE</div>
+        <div class="overlay" id="overlay"><div class="spin"></div><div>Analysing frame&hellip;</div></div>
+      </div>
+      <div class="controls">
+        <textarea id="question">Describe this scene in one short paragraph.</textarea>
+        <button class="capture" id="capBtn" title="Capture &amp; analyse">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="hint">Frame your subject in the preview, then tap the camera button &mdash; a frame is
+        analysed only when you capture. Answers come back in a few seconds from a local vision
+        model (Ollama), with an automatic cloud fallback if the local model is unavailable.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="bar"></span>Questions &amp; Answers</h2>
+    <div class="qa" id="qa">
+      <div class="empty" id="empty">No captures yet. Tap the camera button to ask about the live view.</div>
+    </div>
+  </section>
+</main>
+
+<footer>Bitgreen Technolabz &middot; Arduino UNO&nbsp;Q Edge AI &middot; local Ollama + Gemini fallback</footer>
+
+<script>
+  var BG_SVG = '<svg viewBox="0 0 150 34" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect x="2" y="3" width="28" height="28" rx="8" fill="#10a9a4"/>' +
+    '<path d="M11 9h7a4 4 0 0 1 0 8 4 4 0 0 1 0 8h-7z" fill="#fff"/>' +
+    '<rect x="11" y="9" width="3.4" height="16" fill="#10a9a4"/>' +
+    '<text x="38" y="17" font-family="Georgia,serif" font-size="15" font-weight="700" fill="#1A1A2E">BITGREEN</text>' +
+    '<text x="38" y="28" font-family="Arial" font-size="7.5" letter-spacing="3" fill="#64748b">TECHNOLABZ</text>' +
+    '</svg>';
+
+  var PRESETS = [
+    "Describe this scene in one short paragraph.",
+    "What objects are on the desk?",
+    "Is there a person in view?",
+    "What is the dominant colour?",
+    "How many cups are visible?"
+  ];
+  var chips = document.getElementById('chips');
+  PRESETS.forEach(function(p){
+    var c = document.createElement('span');
+    c.className = 'chip'; c.textContent = p;
+    c.onclick = function(){ document.getElementById('question').value = p; };
+    chips.appendChild(c);
+  });
+
+  var capBtn = document.getElementById('capBtn');
+  var overlay = document.getElementById('overlay');
+  var qa = document.getElementById('qa');
+  var empty = document.getElementById('empty');
+
+  function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  function addItem(o){
+    if(empty){ empty.remove(); empty=null; }
+    var div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML =
+      '<img class="thumb" src="'+o.image+'">' +
+      '<div class="qa-text">' +
+        '<p class="q">'+esc(o.question)+'</p>' +
+        '<p class="a">'+esc(o.answer)+'</p>' +
+        '<div class="meta"><span>&#9201; '+o.latency+' s</span><span>'+
+            new Date().toLocaleTimeString()+'</span></div>' +
+      '</div>';
+    qa.insertBefore(div, qa.firstChild);
+  }
+
+  function addError(msg){
+    var div = document.createElement('div');
+    div.className='err'; div.textContent=msg;
+    qa.insertBefore(div, qa.firstChild);
+    setTimeout(function(){ div.remove(); }, 9000);
+  }
+
+  capBtn.onclick = async function(){
+    capBtn.disabled = true; overlay.classList.add('show');
+    try{
+      var r = await fetch('/ask', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({question: document.getElementById('question').value})
+      });
+      var data = await r.json();
+      if(data.error){ addError(data.error); }
+      else { addItem(data); }
+    }catch(e){ addError('Network error: ' + e); }
+    finally{ capBtn.disabled=false; overlay.classList.remove('show'); }
+  };
+
+  async function poll(){
+    try{
+      var s = await (await fetch('/status')).json();
+      var dot = document.getElementById('dot');
+      var txt = document.getElementById('statusText');
+      if(s.model_online){ dot.className='dot on'; txt.textContent='Model online'; }
+      else { dot.className='dot bad'; txt.textContent='Model offline'; }
+    }catch(e){
+      document.getElementById('dot').className='dot bad';
+      document.getElementById('statusText').textContent='Board unreachable';
+    }
+  }
+  poll(); setInterval(poll, 5000);
+</script>
+</body>
+</html>
