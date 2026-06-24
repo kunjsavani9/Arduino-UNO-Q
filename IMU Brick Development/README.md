@@ -21,7 +21,7 @@ IMU Brick Development/
 │   │   ├── train_data_up_down_YYYYMMDD_HHMMSS.csv
 │   │   └── train_data_circle_YYYYMMDD_HHMMSS.csv
 │   ├── gesture_model.eim        ← Edge Impulse model binary
-│   └── main.py                  ← Phase A: data collection OR Phase B: live inference
+│   └── main.py                  ← Phase A: data collection OR Phase B: live inference(main1.py)
 ├── sketch/
 │   └── sketch.ino               ← STM32 MCU: reads Modulino Movement, pushes via Bridge
 ├── app.yaml
