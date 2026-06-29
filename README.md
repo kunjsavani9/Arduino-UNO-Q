@@ -98,7 +98,7 @@ Each project folder typically contains its own `sketch.ino`, `main.py`, `app.yam
 ---
 ## Demo Video
 
-https://drive.google.com/drive/folders/1Kua1aSmeAhjPNTTjuvVJiPrs7v6err-W?usp=drive_link
+[https://drive.google.com/drive/folders/1Kua1aSmeAhjPNTTjuvVJiPrs7v6err-W?usp=drive_link](https://drive.google.com/drive/folders/1Kua1aSmeAhjPNTTjuvVJiPrs7v6err-W?usp=drive_link)
 
 ---
 ## Author
