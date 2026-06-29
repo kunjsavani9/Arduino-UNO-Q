@@ -21,7 +21,7 @@ IMU Brick Development/
 │   │   ├── train_data_up_down_YYYYMMDD_HHMMSS.csv
 │   │   └── train_data_circle_YYYYMMDD_HHMMSS.csv
 │   ├── gesture_model.eim        ← Edge Impulse model binary
-│   └── main.py                  ← Phase A: data collection OR Phase B: live inference(main1.py)
+│   └── main.py                  ← Phase A: data collection OR Phase B: live inference
 ├── sketch/
 │   └── sketch.ino               ← STM32 MCU: reads Modulino Movement, pushes via Bridge
 ├── app.yaml
@@ -95,16 +95,16 @@ IMU ready. Streaming via Bridge.notify...
 
 ---
 
-## Phase 2A — main.py (Data Collection)
+## Phase 2A — main.py (Data Collection — Fixed 2 Minutes Per Class)
 
 Use this version of `main.py` to collect gesture training data.
+Each run collects exactly **2 minutes** of data then stops automatically.
 
-> **Change `label` on line 13 before each run.**
+> **Change `label` on line 14 before each run.**
 
 ```python
 import pandas as pd
 import time
-import numpy as np
 import os
 
 from collections import deque
@@ -120,7 +120,8 @@ from datetime import datetime
 # ─────────────────────────────────────────────────────────
 label = "idle"
 
-SAMPLES_MAX = 10
+SAMPLES_MAX      = 10
+COLLECTION_SECS  = 120   # 2 minutes fixed per class
 
 logger = Logger("gesture-recognition")
 
@@ -132,13 +133,45 @@ collection_csv_path = Path.cwd() / "python" / "data" / collection_filename
 collection_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
 logger.info(f"Label       : {label}")
+logger.info(f"Duration    : {COLLECTION_SECS}s (2 minutes)")
 logger.info(f"Writing to  : {collection_csv_path.resolve()}")
 
-# ── Sample buffer ─────────────────────────────────────────
-sample_list = deque(maxlen=SAMPLES_MAX)
+# ── State ─────────────────────────────────────────────────
+sample_list  = deque(maxlen=SAMPLES_MAX)
+start_time   = None
+total_saved  = 0
+done         = False
 
 # ── Bridge callback ───────────────────────────────────────
 def record_sensor_movement(x: float, y: float, z: float):
+    global start_time, total_saved, done
+
+    # Start timer on first sample received
+    if start_time is None:
+        start_time = time.time()
+        logger.info(f"[{label.upper()}] Collection started — 2 minutes running...")
+
+    # Stop if already done
+    if done:
+        return
+
+    elapsed = time.time() - start_time
+
+    # Stop after 2 minutes
+    if elapsed >= COLLECTION_SECS:
+        if not done:
+            done = True
+            logger.info(f"[{label.upper()}] 2 minutes complete!")
+            logger.info(f"[{label.upper()}] Total samples saved: {total_saved}")
+            logger.info(f"[{label.upper()}] File: {collection_csv_path.name}")
+            App.stop()
+        return
+
+    # Countdown reminders
+    remaining = int(COLLECTION_SECS - elapsed)
+    if remaining in [90, 60, 30] and len(sample_list) == 0:
+        logger.info(f"[{label.upper()}] {remaining}s remaining...")
+
     try:
         sample = {
             "time":  time.time() * 1000,
@@ -147,13 +180,10 @@ def record_sensor_movement(x: float, y: float, z: float):
             "raw_z": float(z)
         }
 
-        logger.info(f"Sample: {sample}")
         sample_list.append(sample)
 
         if len(sample_list) == SAMPLES_MAX:
             df_chunk = pd.DataFrame(list(sample_list))
-
-            logger.info(f"Saving {SAMPLES_MAX} samples → {collection_csv_path.name}")
 
             df_chunk.to_csv(
                 collection_csv_path,
@@ -162,6 +192,11 @@ def record_sensor_movement(x: float, y: float, z: float):
                 index=False
             )
 
+            total_saved += SAMPLES_MAX
+            elapsed_str  = f"{int(elapsed)}s"
+            logger.info(f"  [{elapsed_str:>4}] Saved {SAMPLES_MAX} samples "
+                        f"(total: {total_saved}) → {collection_csv_path.name}")
+
             sample_list.clear()
 
     except Exception as e:
@@ -169,9 +204,8 @@ def record_sensor_movement(x: float, y: float, z: float):
 
 # ── Register Bridge provider ──────────────────────────────
 try:
-    logger.info("Registering 'record_sensor_movement' Bridge provider")
     Bridge.provide("record_sensor_movement", record_sensor_movement)
-
+    logger.info("Waiting for IMU data from MCU...")
 except RuntimeError:
     logger.debug("'record_sensor_movement' already registered")
 
@@ -181,15 +215,27 @@ App.run()
 
 ### Collection Procedure
 
-| Run | label value | Gesture to perform | Duration |
+| Run | `label` value | Gesture to perform | Auto-stops after |
 |---|---|---|---|
-| Run 1 | `"idle"` | Hold board completely still on table | 2–3 min |
-| Run 2 | `"up_down"` | Move board up ~15 cm then back down, steady rhythm | 2–3 min |
-| Run 3 | `"circle"` | Move board in horizontal circles ~15 cm diameter | 2–3 min |
+| Run 1 | `"idle"` | Hold board completely still on table | 2 minutes |
+| Run 2 | `"up_down"` | Move board up ~15 cm then back down, steady rhythm | 2 minutes |
+| Run 3 | `"circle"` | Move board in horizontal circles ~15 cm diameter | 2 minutes |
 
-**After each run** you should see in the Python tab:
+**Expected output during collection:**
 ```
-Saving 200 samples → train_data_idle_20260624_093735.csv
+Label       : idle
+Duration    : 120s (2 minutes)
+Writing to  : /app/python/data/train_data_idle_20260624_HHMMSS.csv
+Waiting for IMU data from MCU...
+[IDLE] Collection started — 2 minutes running...
+  [  3s] Saved 10 samples (total: 10)   → train_data_idle_...csv
+  [  6s] Saved 10 samples (total: 20)   → train_data_idle_...csv
+[IDLE] 90s remaining...
+[IDLE] 60s remaining...
+[IDLE] 30s remaining...
+[IDLE] 2 minutes complete!
+[IDLE] Total samples saved: 7500
+[IDLE] File: train_data_idle_20260624_HHMMSS.csv
 ```
 
 ---
@@ -296,20 +342,118 @@ Verify model info:
 
 ---
 
-## Phase 7 — Install Dependencies
+## Phase 7 — Board Setup (Run Once on Every New Board)
+
+> Run all commands in board shell via SSH or ADB.
+
+### Step 1 — Verify internet connectivity
 
 ```bash
-# Board shell
+ping -c 3 8.8.8.8
+# Must show: 3 packets transmitted, 3 received
+```
+
+If ping fails, fix DNS first:
+```bash
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf
+ping -c 3 deb.debian.org
+```
+
+---
+
+### Step 2 — Update package list
+
+```bash
 sudo apt-get update
-sudo apt-get install python3-pip python3-pyaudio portaudio19-dev -y
-python3 -m pip install numpy six requests pyserial psutil opencv-python-headless --break-system-packages
 ```
 
-Verify:
+---
+
+### Step 3 — Install system packages
+
 ```bash
-python3 -c "import numpy; import six; import cv2; print('All deps OK')"
-# Expected: All deps OK
+sudo apt-get install -y \
+  python3-pip \
+  python3-pyaudio \
+  portaudio19-dev \
+  libportaudio2
 ```
+
+---
+
+### Step 4 — Install Python packages
+
+```bash
+python3 -m pip install \
+  numpy \
+  six \
+  requests \
+  pyserial \
+  psutil \
+  pandas \
+  opencv-python-headless \
+  --break-system-packages
+```
+
+---
+
+### Step 5 — Verify all dependencies
+
+```bash
+python3 -c "
+import numpy, six, cv2, pandas, serial, psutil
+print('All dependencies OK')
+"
+# Expected: All dependencies OK
+```
+
+---
+
+### Step 6 — Transfer .eim model from Mac to board
+
+```bash
+# Run on Mac terminal (not board shell)
+scp /Users/kunj/Downloads/ei-imu-arduino-uno-q-v1.eim \
+    arduino@192.168.1.28:/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
+```
+
+---
+
+### Step 7 — Fix execute permission
+
+```bash
+# Run on board shell — required after EVERY file transfer
+chmod +x /home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
+```
+
+---
+
+### Step 8 — Verify model is ready
+
+```bash
+ls -lh /home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
+# Must show: -rwxr-xr-x ... 14M
+
+/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim --print-info
+# Must show JSON with:
+#   "labels": ["circle", "idle", "up_down"]
+#   "frequency": 62.5
+#   "input_features_count": 375
+```
+
+---
+
+### One-liner (Steps 2–5 combined)
+
+```bash
+sudo apt-get update && \
+sudo apt-get install -y python3-pip python3-pyaudio portaudio19-dev libportaudio2 && \
+python3 -m pip install numpy six requests pyserial psutil pandas opencv-python-headless --break-system-packages && \
+python3 -c "import numpy, six, cv2, pandas, serial, psutil; print('All OK')"
+```
+
+> **Important:** `chmod +x` must be run every time a new `.eim` file is transferred to the board. File transfers do not preserve execute permission.
 
 ---
 
@@ -334,7 +478,7 @@ import subprocess
 import json
 import time
 
-MODEL_PATH = "/app/python/gesture_model.eim"
+MODEL_PATH = "/app/python/gesture_model_public.eim"
 
 class GestureClassifier:
 
@@ -518,31 +662,36 @@ App.run()
 ## Quick Reference — All Commands
 
 ```bash
-# Transfer training data to Mac
+# ── Board setup (run once on every new board) ─────────────────
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-pyaudio portaudio19-dev libportaudio2
+python3 -m pip install numpy six requests pyserial psutil pandas opencv-python-headless --break-system-packages
+python3 -c "import numpy, six, cv2, pandas, serial, psutil; print('All OK')"
+
+# ── Fix DNS if apt-get fails (no internet) ────────────────────
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf
+
+# ── Transfer training data from board to Mac ───────────────────
 scp -r arduino@192.168.1.28:/home/arduino/ArduinoApps/imu-brick-development/python/data \
     /Users/kunj/Downloads/gesture_data
 
-# Transfer .eim model to board
+# ── Transfer .eim model from Mac to board ─────────────────────
 scp /Users/kunj/Downloads/ei-imu-arduino-uno-q-v1.eim \
-    arduino@192.168.1.28:/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model.eim
+    arduino@192.168.1.28:/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
 
-# Make model executable
-chmod +x /home/arduino/ArduinoApps/imu-brick-development/python/gesture_model.eim
+# ── Fix permission — run after EVERY transfer ─────────────────
+chmod +x /home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
 
-# Verify model
-/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model.eim --print-info
+# ── Verify model ───────────────────────────────────────────────
+ls -lh /home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim
+# Must show: -rwxr-xr-x ... 14M
 
-# Install all dependencies
-sudo apt-get install python3-pip python3-pyaudio portaudio19-dev -y
-python3 -m pip install numpy six requests pyserial psutil opencv-python-headless --break-system-packages
+/home/arduino/ArduinoApps/imu-brick-development/python/gesture_model_public.eim --print-info
+# Must show labels: ["circle","idle","up_down"]
 
-# Verify dependencies
-python3 -c "import numpy; import six; import cv2; print('All deps OK')"
-
-# SSH into board
+# ── Board access ───────────────────────────────────────────────
 ssh arduino@192.168.1.28
-
-# ADB shell
 adb shell
 ```
 
@@ -552,17 +701,19 @@ adb shell
 
 | Error | Fix |
 |---|---|
+| `Temporary failure resolving 'deb.debian.org'` | Board has no internet. Fix DNS: `echo "nameserver 8.8.8.8" \| sudo tee /etc/resolv.conf` then retry |
+| `PermissionError: [Errno 13] Permission denied` | Run `chmod +x` on the `.eim` file — required after every transfer |
+| `FileNotFoundError: gesture_model.eim` | Model must be in `python/` folder — path must be `/app/python/gesture_model_public.eim` |
 | `pip3: command not found` | Use `python3 -m pip install` instead |
-| `FileNotFoundError: gesture_model.eim` | App Lab runs in Docker — model must be in `python/` folder, path must be `/app/python/gesture_model.eim` |
 | `Missing 'id' field in message` | All `.eim` messages require `"id"` field |
 | `Invalid message, should initialize first` | Must send `{"id": 1, "hello": 1}` before any classify messages |
-| `ModuleNotFoundError: edge_impulse_linux` | Package installed on host but not in Docker — use subprocess approach instead |
+| `ModuleNotFoundError: edge_impulse_linux` | Package not available in Docker — use subprocess approach |
 | `exited with code 0` immediately | Missing `App.run()` at end of `main.py` |
 | `TypeError: not all arguments converted` | Use f-string: `logger.info(f"text {var}")` not `logger.info("text", var)` |
+| `No module named 'numpy'` | Run `python3 -m pip install numpy --break-system-packages` |
+| `No module named 'six'` | Run `python3 -m pip install six --break-system-packages` |
+| `Missing OpenCV` | Run `python3 -m pip install opencv-python-headless --break-system-packages` |
 
 ---
 
 *Arduino UNO Q · Bitgreen Technolabz · Edge AI Track 3 · Gesture Recognition*
-
-
-
